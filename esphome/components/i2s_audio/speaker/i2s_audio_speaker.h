@@ -9,7 +9,7 @@
 #include <freertos/FreeRTOS.h>
 
 #include "esphome/components/audio/audio.h"
-#include "esphome/components/ring_buffer/ring_buffer.h"
+#include "esphome/core/ring_buffer.h"
 #include "esphome/components/speaker/speaker.h"
 
 #include "esphome/core/component.h"
@@ -146,7 +146,7 @@ class I2SAudioSpeakerBase : public I2SAudioOut, public speaker::Speaker, public 
   QueueHandle_t i2s_event_queue_{nullptr};
   QueueHandle_t write_records_queue_{nullptr};
 
-  std::weak_ptr<ring_buffer::RingBuffer> audio_ring_buffer_;
+  std::weak_ptr<RingBuffer> audio_ring_buffer_;
 
   uint32_t buffer_duration_ms_;
 
