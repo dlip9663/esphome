@@ -31,7 +31,7 @@ from .. import (
     validate_mclk_divisible_by_3,
 )
 
-AUTO_LOAD = ["audio", "ring_buffer"]
+AUTO_LOAD = ["audio"]
 CODEOWNERS = ["@jesserockz", "@kahrendt"]
 DEPENDENCIES = ["i2s_audio"]
 
