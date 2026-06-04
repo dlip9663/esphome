@@ -222,9 +222,9 @@ class ConstAudioSourceBuffer : public AudioReadableBuffer {
 /// internal splice buffer, so callers always see frame-aligned data.
 ///
 /// Not thread-safe. The underlying ring_buffer::RingBuffer supports one producer and one consumer
-/// running concurrently, but a given ring_buffer::RingBufferAudioSource (its acquired item, splice buffer, and
+/// running concurrently, but a given RingBufferAudioSource (its acquired item, splice buffer, and
 /// queued region) must be used by only one thread, and that thread is the ring buffer's consumer.
-class ring_buffer::RingBufferAudioSource : public AudioReadableBuffer {
+class RingBufferAudioSource : public AudioReadableBuffer {
  public:
   /// Maximum supported alignment. Sized to cover 32-bit samples across up to 2 channels (8 bytes).
   static constexpr size_t MAX_ALIGNMENT_BYTES = 8;
@@ -236,10 +236,10 @@ class ring_buffer::RingBufferAudioSource : public AudioReadableBuffer {
   ///        Pass bytes_per_frame to make every exposed region a whole number of frames. Must be in
   ///        [1, MAX_ALIGNMENT_BYTES].
   /// @return unique_ptr if parameters are valid, nullptr otherwise
-  static std::unique_ptr<ring_buffer::RingBufferAudioSource> create(std::shared_ptr<ring_buffer::RingBuffer> ring_buffer,
+  static std::unique_ptr<RingBufferAudioSource> create(std::shared_ptr<ring_buffer::RingBuffer> ring_buffer,
                                                        size_t max_fill_bytes, uint8_t alignment_bytes = 1);
 
-  ~ring_buffer::RingBufferAudioSource() override;
+  ~RingBufferAudioSource() override;
 
   // AudioReadableBuffer interface
   const uint8_t *data() const override { return this->current_data_; }
@@ -260,7 +260,7 @@ class ring_buffer::RingBufferAudioSource : public AudioReadableBuffer {
  protected:
   /// @brief Constructs a new ring-buffer-backed audio source. Use create() instead, which validates
   /// arguments before construction.
-  explicit ring_buffer::RingBufferAudioSource(std::shared_ptr<ring_buffer::RingBuffer> ring_buffer, size_t max_fill_bytes,
+  explicit RingBufferAudioSource(std::shared_ptr<ring_buffer::RingBuffer> ring_buffer, size_t max_fill_bytes,
                                  uint8_t alignment_bytes)
       : ring_buffer_(std::move(ring_buffer)), max_fill_bytes_(max_fill_bytes), alignment_bytes_(alignment_bytes) {}
 
