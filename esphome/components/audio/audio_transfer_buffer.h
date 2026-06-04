@@ -1,7 +1,7 @@
 #pragma once
 
 #ifdef USE_ESP32
-#include "esphome/components/ring_buffer/ring_buffer.h"
+#include "esphome/core/ring_buffer.h"
 #include "esphome/core/defines.h"
 
 #ifdef USE_SPEAKER
@@ -76,7 +76,7 @@ class AudioTransferBuffer {
   void deallocate_buffer_();
 
   // A possible source or sink for the transfer buffer
-  std::shared_ptr<ring_buffer::RingBuffer> ring_buffer_;
+  std::shared_ptr<RingBuffer> ring_buffer_;
 
   uint8_t *buffer_{nullptr};
   uint8_t *data_start_{nullptr};
@@ -105,7 +105,7 @@ class AudioSinkTransferBuffer : public AudioTransferBuffer {
 
   /// @brief Adds a ring buffer as the transfer buffer's sink.
   /// @param ring_buffer weak_ptr to the allocated ring buffer
-  void set_sink(const std::weak_ptr<ring_buffer::RingBuffer> &ring_buffer) { this->ring_buffer_ = ring_buffer.lock(); }
+  void set_sink(const std::weak_ptr<RingBuffer> &ring_buffer) { this->ring_buffer_ = ring_buffer.lock(); }
 
 #ifdef USE_SPEAKER
   /// @brief Adds a speaker as the transfer buffer's sink.
@@ -179,7 +179,7 @@ class AudioSourceTransferBuffer : public AudioTransferBuffer, public AudioReadab
 
   /// @brief Adds a ring buffer as the transfer buffer's source.
   /// @param ring_buffer weak_ptr to the allocated ring buffer
-  void set_source(const std::weak_ptr<ring_buffer::RingBuffer> &ring_buffer) {
+  void set_source(const std::weak_ptr<RingBuffer> &ring_buffer) {
     this->ring_buffer_ = ring_buffer.lock();
   };
 
@@ -221,7 +221,7 @@ class ConstAudioSourceBuffer : public AudioReadableBuffer {
 /// trailing partial frame from one chunk and joining it with the head of the next chunk in a small
 /// internal splice buffer, so callers always see frame-aligned data.
 ///
-/// Not thread-safe. The underlying ring_buffer::RingBuffer supports one producer and one consumer
+/// Not thread-safe. The underlying RingBuffer supports one producer and one consumer
 /// running concurrently, but a given RingBufferAudioSource (its acquired item, splice buffer, and
 /// queued region) must be used by only one thread, and that thread is the ring buffer's consumer.
 class RingBufferAudioSource : public AudioReadableBuffer {
@@ -236,7 +236,7 @@ class RingBufferAudioSource : public AudioReadableBuffer {
   ///        Pass bytes_per_frame to make every exposed region a whole number of frames. Must be in
   ///        [1, MAX_ALIGNMENT_BYTES].
   /// @return unique_ptr if parameters are valid, nullptr otherwise
-  static std::unique_ptr<RingBufferAudioSource> create(std::shared_ptr<ring_buffer::RingBuffer> ring_buffer,
+  static std::unique_ptr<RingBufferAudioSource> create(std::shared_ptr<RingBuffer> ring_buffer,
                                                        size_t max_fill_bytes, uint8_t alignment_bytes = 1);
 
   ~RingBufferAudioSource() override;
@@ -260,7 +260,7 @@ class RingBufferAudioSource : public AudioReadableBuffer {
  protected:
   /// @brief Constructs a new ring-buffer-backed audio source. Use create() instead, which validates
   /// arguments before construction.
-  explicit RingBufferAudioSource(std::shared_ptr<ring_buffer::RingBuffer> ring_buffer, size_t max_fill_bytes,
+  explicit RingBufferAudioSource(std::shared_ptr<RingBuffer> ring_buffer, size_t max_fill_bytes,
                                  uint8_t alignment_bytes)
       : ring_buffer_(std::move(ring_buffer)), max_fill_bytes_(max_fill_bytes), alignment_bytes_(alignment_bytes) {}
 
@@ -268,7 +268,7 @@ class RingBufferAudioSource : public AudioReadableBuffer {
   /// into the splice buffer so they can be stitched with the next chunk.
   void release_item_();
 
-  std::shared_ptr<ring_buffer::RingBuffer> ring_buffer_;
+  std::shared_ptr<RingBuffer> ring_buffer_;
   size_t max_fill_bytes_;
 
   void *acquired_item_{nullptr};
