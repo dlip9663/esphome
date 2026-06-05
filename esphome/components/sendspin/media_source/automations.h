@@ -7,7 +7,7 @@
 #include "esphome/core/automation.h"
 #include "sendspin_media_source.h"
 
-namespace esphome::sendspin_ {
+namespace esphome::sendspin {
 
 template<typename... Ts>
 class EnableStaticDelayAdjustmentAction : public Action<Ts...>, public Parented<SendspinMediaSource> {
@@ -21,6 +21,6 @@ class DisableStaticDelayAdjustmentAction : public Action<Ts...>, public Parented
   void play(const Ts &...x) override { this->parent_->set_static_delay_adjustable(false); }
 };
 
-}  // namespace esphome::sendspin_
+}  // namespace esphome::sendspin
 
 #endif
