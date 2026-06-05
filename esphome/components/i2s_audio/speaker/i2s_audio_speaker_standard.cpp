@@ -71,7 +71,7 @@ void I2SAudioSpeaker::run_speaker_task() {
   if (silence_buffer != nullptr) {
     memset(silence_buffer, 0, dma_buffer_bytes);
 
-    std::shared_ptr<ring_buffer::RingBuffer> temp_ring_buffer = ring_buffer::RingBuffer::create(ring_buffer_size);
+    std::shared_ptr<RingBuffer> temp_ring_buffer(RingBuffer::create(ring_buffer_size).release());
     audio_source =
         audio::RingBufferAudioSource::create(temp_ring_buffer, dma_buffer_bytes, static_cast<uint8_t>(bytes_per_frame));
 
