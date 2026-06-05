@@ -33,17 +33,19 @@ bool SendspinDecoder::process_header(const uint8_t *data, size_t data_size, Chun
 
   switch (chunk_type) {
     case CHUNK_TYPE_FLAC_HEADER: {
-      this->flac_decoder_ = make_unique<esp_audio_libs::flac::FLACDecoder>();
-      this->flac_decoder_->set_crc_check_enabled(false);  // Disable CRC check for small speed up
+      this->flac_decoder_ = make_unique<micro_flac::FLACDecoder>();
+      // CRC check not configurable in micro_flac (disabled by default)
 
-      auto result = this->flac_decoder_->read_header(data, data_size);
+      size_t hdr_bytes_consumed = 0;
+      size_t hdr_samples_decoded = 0;
+      auto result = this->flac_decoder_->decode(data, data_size, nullptr, 0, hdr_bytes_consumed, hdr_samples_decoded);
 
-      if (result == esp_audio_libs::flac::FLAC_DECODER_HEADER_OUT_OF_DATA) {
+      if (result == micro_flac::FLAC_DECODER_NEED_MORE_DATA) {
         ESP_LOGW(TAG, "Need more data to decode FLAC header");
         return false;
       }
 
-      if (result != esp_audio_libs::flac::FLAC_DECODER_SUCCESS) {
+      if (result != micro_flac::FLAC_DECODER_HEADER_READY) {
         ESP_LOGE(TAG, "Serious error decoding FLAC header");
         return false;
       }
@@ -52,7 +54,7 @@ bool SendspinDecoder::process_header(const uint8_t *data, size_t data_size, Chun
           audio::AudioStreamInfo(this->flac_decoder_->get_sample_depth(), this->flac_decoder_->get_num_channels(),
                                  this->flac_decoder_->get_sample_rate());
       *stream_info = this->current_stream_info_;
-      this->maximum_decoded_size_ = this->flac_decoder_->get_output_buffer_size_bytes();
+      this->maximum_decoded_size_ = this->flac_decoder_->get_output_buffer_size_samples() * this->flac_decoder_->get_stream_info().bytes_per_sample();
       break;
     }
     case CHUNK_TYPE_OPUS_DUMMY_HEADER: {
@@ -117,14 +119,18 @@ bool SendspinDecoder::decode_audio_chunk(const uint8_t *data, size_t data_size, 
     *decoded_size = data_size;
   } else if ((this->flac_decoder_ != nullptr) && (this->current_codec_ == SendspinCodecFormat::FLAC)) {
     uint32_t output_samples = 0;
-    auto result = this->flac_decoder_->decode_frame(data, data_size, output_buffer, &output_samples);
+    size_t frm_bytes_consumed = 0;
+    size_t frm_samples_decoded = 0;
+    auto result = this->flac_decoder_->decode(data, data_size, output_buffer, output_buffer_size,
+                                              frm_bytes_consumed, frm_samples_decoded);
+    output_samples = frm_samples_decoded;
 
-    if (result == esp_audio_libs::flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
+    if (result == micro_flac::FLAC_DECODER_NEED_MORE_DATA) {
       ESP_LOGE(TAG, "FLAC decoder ran out of data");
       return false;
     }
 
-    if (result > esp_audio_libs::flac::FLAC_DECODER_ERROR_OUT_OF_DATA) {
+    if (result != micro_flac::FLAC_DECODER_SUCCESS && result != micro_flac::FLAC_DECODER_NEED_MORE_DATA && result != micro_flac::FLAC_DECODER_END_OF_STREAM) {
       ESP_LOGE(TAG, "Serious error decoding FLAC file");
       return false;
     }
