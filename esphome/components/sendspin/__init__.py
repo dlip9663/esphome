@@ -1,134 +1,56 @@
-from dataclasses import dataclass
+"""Sendspin Media Player Setup."""
 
 from esphome import automation
 import esphome.codegen as cg
-from esphome.components import esp32, network, psram, socket, wifi
+from esphome.components import audio, esp32, network, socket, wifi
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_BUFFER_SIZE,
     CONF_ID,
-    CONF_SAMPLE_RATE,
     CONF_TASK_STACK_IN_PSRAM,
+    CONF_THEN,
+    PLATFORM_ESP32,
 )
-from esphome.core import CORE, ID
-from esphome.cpp_generator import TemplateArgsType
-from esphome.types import ConfigType
 
-# mdns for autodiscovery
-AUTO_LOAD = ["mdns"]
+# audio for codec support, json for protocol messages, mdns for autodiscovery
+AUTO_LOAD = ["audio", "json", "mdns"]
 CODEOWNERS = ["@kahrendt"]
 DEPENDENCIES = ["network"]
-DOMAIN = "sendspin"
+
+CONF_ON_SERVER_SETTINGS = "on_server_settings"
+CONF_KALMAN_PROCESS_ERROR = "kalman_process_error"
+CONF_KALMAN_FORGET_FACTOR = "kalman_forget_factor"
+
 
 CONF_SENDSPIN_ID = "sendspin_id"
 
-CONF_INITIAL_STATIC_DELAY = "initial_static_delay"
-CONF_FIXED_DELAY = "fixed_delay"
-CONF_DECODE_MEMORY = "decode_memory"
-
-# sendspin-cpp library lives in the global `sendspin` namespace.
-sendspin_library_ns = cg.global_ns.namespace("sendspin")
-
-# Library Enums
-SendspinCodecFormat = sendspin_library_ns.enum("SendspinCodecFormat", is_class=True)
-CODEC_FORMAT_FLAC = SendspinCodecFormat.enum("FLAC")
-CODEC_FORMAT_OPUS = SendspinCodecFormat.enum("OPUS")
-CODEC_FORMAT_PCM = SendspinCodecFormat.enum("PCM")
-CODEC_FORMAT_UNSUPPORTED = SendspinCodecFormat.enum("UNSUPPORTED")
-
-# Library Structs
-AudioSupportedFormatObject = sendspin_library_ns.struct("AudioSupportedFormatObject")
-PlayerRoleConfig = sendspin_library_ns.struct("PlayerRoleConfig")
-
-# MemoryLocation enum (from sendspin/types.h) controls SPIRAM-vs-internal-RAM placement
-# preference for the player role's transfer buffers.
-SendspinMemoryLocation = sendspin_library_ns.enum("MemoryLocation", is_class=True)
-
-MEMORY_PSRAM = "psram"
-MEMORY_INTERNAL = "internal"
-MEMORY_LOCATIONS = [MEMORY_PSRAM, MEMORY_INTERNAL]
-MEMORY_LOCATION_ENUM = {
-    MEMORY_PSRAM: SendspinMemoryLocation.PREFER_EXTERNAL,
-    MEMORY_INTERNAL: SendspinMemoryLocation.PREFER_INTERNAL,
-}
-
-# Trailing underscore avoids clashing with sendspin-cpp's global `sendspin` namespace.
-# Analysis tools strip the trailing underscore (same pattern as `template_`).
-sendspin_ns = cg.esphome_ns.namespace("sendspin_")
+sendspin_ns = cg.esphome_ns.namespace("sendspin")
 SendspinHub = sendspin_ns.class_(
     "SendspinHub",
     cg.Component,
 )
 
 
-SendspinSwitchCommandAction = sendspin_ns.class_(
-    "SendspinSwitchCommandAction",
+PublishClientSettingsAction = sendspin_ns.class_(
+    "PublishClientSettingsAction",
+    automation.Action,
+    cg.Parented.template(SendspinHub),
+)
+
+SendSwitchCommandAction = sendspin_ns.class_(
+    "SendSwitchCommandAction",
+    automation.Action,
+    cg.Parented.template(SendspinHub),
+)
+
+GetTrackProgressAction = sendspin_ns.class_(
+    "GetTrackProgressAction",
     automation.Action,
     cg.Parented.template(SendspinHub),
 )
 
 
-@dataclass
-class SendspinConfiguration:
-    artwork_support: bool = False
-    controller_support: bool = False
-    metadata_support: bool = False
-    player_support: bool = False
-    visualizer_support: bool = False
-
-    player_config: ConfigType | None = None
-
-
-def _get_data() -> SendspinConfiguration:
-    if DOMAIN not in CORE.data:
-        CORE.data[DOMAIN] = SendspinConfiguration()
-    return CORE.data[DOMAIN]
-
-
-def request_artwork_support() -> None:
-    """Request artwork role support for Sendspin."""
-    _get_data().artwork_support = True
-
-
-def request_controller_support() -> None:
-    """Request controller role support for Sendspin."""
-    _get_data().controller_support = True
-
-
-def request_metadata_support() -> None:
-    """Request metadata role support for Sendspin."""
-    _get_data().metadata_support = True
-
-
-def request_player_support() -> None:
-    """Request player role support for Sendspin."""
-    _get_data().player_support = True
-
-
-def request_visualizer_support() -> None:
-    """Request visualizer role support for Sendspin."""
-    _get_data().visualizer_support = True
-
-
-def register_player_config(config: ConfigType) -> None:
-    """Register the player role config from the media source subcomponent."""
-    data = _get_data()
-    request_player_support()
-    if data.player_config is not None:
-        raise cv.Invalid(
-            "Only one sendspin media_source player configuration is supported"
-        )
-    data.player_config = config
-
-
-def _validate_task_stack_in_psram(value):
-    value = cv.boolean(value)
-    if value:
-        return cv.requires_component(psram.DOMAIN)(value)
-    return value
-
-
-def _request_high_performance_networking(config: ConfigType) -> ConfigType:
+def _request_high_performance_networking(config):
     """Request high performance networking for Sendspin streaming.
 
     Also enables wake_loop_threadsafe support for fast defer() callbacks
@@ -138,10 +60,7 @@ def _request_high_performance_networking(config: ConfigType) -> ConfigType:
     # Socket consumption varies by mode:
     # - Server mode: 1 listening socket + 2 client connections (for handoff)
     # - Client mode: 1 outbound connection
-    socket.consume_sockets(
-        1, "sendspin_websocket_server", socket.SocketType.TCP_LISTEN
-    )(config)
-    socket.consume_sockets(2, "sendspin_websocket_server")(config)
+    socket.consume_sockets(3, "sendspin_websocket_server")(config)
     socket.consume_sockets(1, "sendspin_websocket_client")(config)
 
     wifi.enable_runtime_power_save_control()
@@ -149,145 +68,98 @@ def _request_high_performance_networking(config: ConfigType) -> ConfigType:
 
 
 CONFIG_SCHEMA = cv.All(
-    cv.Schema(
+    cv.COMPONENT_SCHEMA.extend(
         {
             cv.GenerateID(): cv.declare_id(SendspinHub),
-            cv.Optional(CONF_TASK_STACK_IN_PSRAM): _validate_task_stack_in_psram,
+            cv.Optional(CONF_TASK_STACK_IN_PSRAM, default=False): cv.boolean,
+            cv.Optional(CONF_KALMAN_PROCESS_ERROR): cv.invalid(
+                f"The {CONF_KALMAN_PROCESS_ERROR} option has been removed"
+            ),
+            cv.Optional(CONF_KALMAN_FORGET_FACTOR): cv.invalid(
+                f"The {CONF_KALMAN_FORGET_FACTOR} option has been removed"
+            ),
+            cv.Optional(CONF_BUFFER_SIZE): cv.invalid(
+                f"The {CONF_BUFFER_SIZE} option is now set as an option in the Sendspin media_source configuration"
+            ),
         }
     ),
-    cv.only_on_esp32,
+    cv.only_on([PLATFORM_ESP32]),
     _request_high_performance_networking,
 )
 
 
-def _request_controller_role(config: ConfigType) -> ConfigType:
-    """Request the controller role for the sendspin.switch action."""
-    request_controller_support()
+def _final_validate_codecs(config):
+    audio.request_flac_support()
+    audio.request_opus_support()
     return config
 
 
-SENDSPIN_SIMPLE_ACTION_SCHEMA = cv.All(
-    automation.maybe_simple_id(
-        cv.Schema(
-            {
-                cv.GenerateID(): cv.use_id(SendspinHub),
-            }
-        )
-    ),
-    _request_controller_role,
+FINAL_VALIDATE_SCHEMA = _final_validate_codecs
+
+
+async def to_code(config):
+    socket.require_wake_loop_threadsafe()
+
+    cg.add_define("USE_SENDSPIN", True)  # for MDNS
+
+    # Client mode - enable ESP-IDF WebSocket client
+    esp32.add_idf_component(name="espressif/esp_websocket_client", ref="1.6.1")
+    # Server mode - enable HTTP server with WebSocket support
+    esp32.add_idf_sdkconfig_option("CONFIG_HTTPD_WS_SUPPORT", True)
+
+    var = cg.new_Pvariable(config[CONF_ID])
+    await cg.register_component(var, config)
+
+    if task_stack_in_psram := config.get(CONF_TASK_STACK_IN_PSRAM):
+        cg.add(var.set_task_stack_in_psram(task_stack_in_psram))
+        if task_stack_in_psram:
+            esp32.add_idf_sdkconfig_option(
+                "CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY", True
+            )
+
+
+SENDSPIN_SWITCH_ACTION_SCHEMA = cv.Schema(
+    {
+        cv.GenerateID(): cv.use_id(SendspinHub),
+    }
 )
 
 
 @automation.register_action(
     "sendspin.switch",
-    SendspinSwitchCommandAction,
-    SENDSPIN_SIMPLE_ACTION_SCHEMA,
+    SendSwitchCommandAction,
+    SENDSPIN_SWITCH_ACTION_SCHEMA,
     synchronous=True,
 )
-async def sendspin_switch_to_code(
-    config: ConfigType,
-    action_id: ID,
-    template_arg: cg.TemplateArguments,
-    args: TemplateArgsType,
-):
+async def sendspin_switch_to_code(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(var, config[CONF_ID])
+    cg.add_define("USE_SENDSPIN_CONTROLLER")
     return var
 
 
-async def to_code(config: ConfigType) -> None:
-    var = cg.new_Pvariable(config[CONF_ID])
-    await cg.register_component(var, config)
+SENDSPIN_GET_TRACK_PROGRESS_ACTION_SCHEMA = cv.Schema(
+    {
+        cv.GenerateID(): cv.use_id(SendspinHub),
+        cv.Required(CONF_THEN): automation.validate_action_list,
+    }
+)
 
-    if config.get(CONF_TASK_STACK_IN_PSRAM):
-        cg.add(var.set_task_stack_in_psram(True))
-        esp32.add_idf_sdkconfig_option(
-            "CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY", True
-        )
 
-    # sendspin-cpp library
-    esp32.add_idf_component(name="sendspin/sendspin-cpp", ref="0.6.1")
-
-    cg.add_define("USE_SENDSPIN", True)  # for MDNS
-
-    data = _get_data()
-
-    # The color role is not yet wired up in ESPHome; disable it in the library for now.
-    esp32.add_idf_sdkconfig_option("CONFIG_SENDSPIN_ENABLE_COLOR", False)
-
-    # Configure Sendspin roles based on requested features (ESPHome internally via USE_SENDSPIN_*)
-    # and disable building unused code paths in the sendspin-cpp library (IDF SDKConfig via CONFIG_SENDSPIN_ENABLE_*).
-    if data.artwork_support:
-        cg.add_define("USE_SENDSPIN_ARTWORK", True)
-    else:
-        esp32.add_idf_sdkconfig_option("CONFIG_SENDSPIN_ENABLE_ARTWORK", False)
-
-    if data.controller_support:
-        cg.add_define("USE_SENDSPIN_CONTROLLER", True)
-    else:
-        esp32.add_idf_sdkconfig_option("CONFIG_SENDSPIN_ENABLE_CONTROLLER", False)
-
-    if data.metadata_support:
-        cg.add_define("USE_SENDSPIN_METADATA", True)
-    else:
-        esp32.add_idf_sdkconfig_option("CONFIG_SENDSPIN_ENABLE_METADATA", False)
-
-    if data.player_support:
-        cg.add_define("USE_SENDSPIN_PLAYER", True)
-
-        # Configures the player role. We always assume support for 16 bits per sample mono and stereo FLAC, Opus, and PCM at the configured sample rate
-        # (with Opus only supported at 48 kHz since that's the only sample rate it supports). Users can configure the specific formats via the Sendspin server
-        player_cfg = data.player_config
-        sample_rate = player_cfg[CONF_SAMPLE_RATE]
-
-        # OPUS only supports 48 kHz audio
-        codecs = [CODEC_FORMAT_FLAC]
-        if sample_rate == 48000:
-            codecs.append(CODEC_FORMAT_OPUS)
-        codecs.append(CODEC_FORMAT_PCM)
-
-        def _audio_format(codec, channels):
-            return cg.StructInitializer(
-                AudioSupportedFormatObject,
-                ("codec", codec),
-                ("channels", channels),
-                ("sample_rate", sample_rate),
-                ("bit_depth", 16),
-            )
-
-        audio_format_structs = [
-            _audio_format(codec, channels) for codec in codecs for channels in (2, 1)
-        ]
-
-        psram_stack = player_cfg.get(CONF_TASK_STACK_IN_PSRAM, False)
-        if psram_stack:
-            esp32.add_idf_sdkconfig_option(
-                "CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY", True
-            )
-
-        # Library defaults: priority 18 (one above httpd_priority 17 so the decoder is not
-        # starved by the HTTP server during the initial encoded-audio burst at stream start),
-        # decode buffer location PREFER_EXTERNAL.
-        player_struct_fields = [
-            ("audio_formats", audio_format_structs),
-            ("audio_buffer_capacity", player_cfg[CONF_BUFFER_SIZE]),
-            ("fixed_delay_us", player_cfg[CONF_FIXED_DELAY]),
-            ("initial_static_delay_ms", player_cfg[CONF_INITIAL_STATIC_DELAY]),
-            ("psram_stack", psram_stack),
-        ]
-        if (decode_memory := player_cfg.get(CONF_DECODE_MEMORY)) is not None:
-            player_struct_fields.append(
-                ("decode_buffer_location", MEMORY_LOCATION_ENUM[decode_memory])
-            )
-        player_config_struct = cg.StructInitializer(
-            PlayerRoleConfig,
-            *player_struct_fields,
-        )
-        cg.add(var.set_player_config(player_config_struct))
-    else:
-        esp32.add_idf_sdkconfig_option("CONFIG_SENDSPIN_ENABLE_PLAYER", False)
-
-    if data.visualizer_support:
-        cg.add_define("USE_SENDSPIN_VISUALIZER", True)
-    else:
-        esp32.add_idf_sdkconfig_option("CONFIG_SENDSPIN_ENABLE_VISUALIZER", False)
+@automation.register_action(
+    "sendspin.get_track_progress",
+    GetTrackProgressAction,
+    SENDSPIN_GET_TRACK_PROGRESS_ACTION_SCHEMA,
+    synchronous=True,
+)
+async def sendspin_get_track_progress_to_code(config, action_id, template_arg, args):
+    cg.add_define("USE_SENDSPIN_METADATA", True)
+    var = cg.new_Pvariable(action_id, template_arg)
+    await cg.register_parented(var, config[CONF_ID])
+    actions = await automation.build_action_list(
+        config[CONF_THEN],
+        cg.TemplateArguments(cg.uint32, *template_arg.args),
+        [(cg.uint32, "x"), *args],
+    )
+    cg.add(var.add_then(actions))
+    return var
