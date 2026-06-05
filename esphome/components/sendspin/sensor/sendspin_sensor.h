@@ -2,41 +2,32 @@
 
 #include "esphome/core/defines.h"
 
-#if defined(USE_ESP32) && defined(USE_SENDSPIN_METADATA) && defined(USE_SENSOR)
+#if defined(USE_ESP32) && defined(USE_SENDSPIN_SENSOR)
 
 #include "esphome/components/sendspin/sendspin_hub.h"
 #include "esphome/components/sensor/sensor.h"
 
-#include <optional>
+#include "esphome/core/component.h"
 
-namespace esphome::sendspin_ {
+namespace esphome {
+namespace sendspin {
 
-class SendspinTrackProgressSensor : public sensor::Sensor, public SendspinPollingChild {
- public:
-  void dump_config() override;
-  void setup() override;
-  void update() override;
-};
-
-enum class SendspinNumericMetadataTypes {
-  TRACK_DURATION,
-  YEAR,
-  TRACK,
-};
-
-class SendspinMetadataSensor : public sensor::Sensor, public SendspinChild {
+class SendspinSensor : public Component, public sensor::Sensor, public Parented<SendspinHub> {
  public:
   void dump_config() override;
   void setup() override;
 
-  void set_metadata_type(SendspinNumericMetadataTypes metadata_type) { this->metadata_type_ = metadata_type; }
+  void set_sensor_type(SendspinSensorTypes sensor_type) { this->sensor_type_ = sensor_type; }
 
  protected:
-  std::optional<float> extract_value_(const sendspin::ServerMetadataStateObject &metadata) const;
+#ifdef USE_SENDSPIN_METADATA
   void publish_if_changed_(float value);
+  void schedule_publish_(const ServerMetadataStateObject &metadata, float value);
+#endif
 
-  SendspinNumericMetadataTypes metadata_type_;
+  SendspinSensorTypes sensor_type_;
 };
 
-}  // namespace esphome::sendspin_
+}  // namespace sendspin
+}  // namespace esphome
 #endif
