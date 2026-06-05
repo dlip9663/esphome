@@ -7,7 +7,7 @@
 #include "esphome/core/automation.h"
 #include "sendspin_hub.h"
 
-namespace esphome::sendspin_ {
+namespace esphome::sendspin {
 
 #ifdef USE_SENDSPIN_CONTROLLER
 template<typename... Ts> class SendspinSwitchCommandAction : public Action<Ts...>, public Parented<SendspinHub> {
@@ -20,6 +20,6 @@ template<typename... Ts> class SendspinSwitchCommandAction : public Action<Ts...
 };
 #endif  // USE_SENDSPIN_CONTROLLER
 
-}  // namespace esphome::sendspin_
+}  // namespace esphome::sendspin
 
 #endif  // USE_ESP32
