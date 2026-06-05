@@ -5,9 +5,9 @@
 #include "audio.h"
 #include "audio_transfer_buffer.h"
 
-#include "esphome/core/ring_buffer.h"
 #include "esphome/core/defines.h"
 #include "esphome/core/helpers.h"
+#include "esphome/core/ring_buffer.h"
 
 #ifdef USE_SPEAKER
 #include "esphome/components/speaker/speaker.h"
