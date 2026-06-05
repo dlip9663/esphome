@@ -208,7 +208,7 @@ void ConstAudioSourceBuffer::consume(size_t bytes) {
 }
 
 std::unique_ptr<RingBufferAudioSource> RingBufferAudioSource::create(
-    std::shared_ptr<ring_buffer::RingBuffer> ring_buffer, size_t max_fill_bytes, uint8_t alignment_bytes) {
+    std::shared_ptr<RingBuffer> ring_buffer, size_t max_fill_bytes, uint8_t alignment_bytes) {
   if (ring_buffer == nullptr || max_fill_bytes == 0 || alignment_bytes == 0 || alignment_bytes > MAX_ALIGNMENT_BYTES) {
     return nullptr;
   }
